@@ -1,14 +1,18 @@
 <?php 
-/*
- * 
- * Depends on 
- *  - ZipArchive
- *  - finfo
- *  - Imagick
- *  - DOM (PHP5 DOM XML)
- * 
- */
-  
+/*-------------------------------------------------------+
+| SodaODT - OpenOffice document template parser for PHP
+| Copyright (C) 2011 Jonathan Doelfs / Sodatech AG
+| http://www.sodatech.com/
++--------------------------------------------------------+
+| This program is released as free software under the
+| Affero GPL license. You can redistribute it and/or
+| modify it under the terms of this license which you
+| can read by viewing the included agpl.txt or online
+| at www.gnu.org/licenses/agpl.html. Removal of this
+| copyright header is strictly prohibited without
+| written permission from the original author(s).
++--------------------------------------------------------*/
+
 include_once( dirname(__FILE__) .'/SodaODTParser.class.php' );
 include_once( dirname(__FILE__) .'/SodaODTFile.class.php' );
 include_once( dirname(__FILE__) .'/SodaODTImage.class.php' );
@@ -16,14 +20,22 @@ include_once( dirname(__FILE__) .'/SodaODTDate.class.php' );
 include_once( dirname(__FILE__) .'/SodaODTInstruction.class.php' );
 
 
-
-
+/**
+ * SodaODT - OpenOffice document template parser for PHP
+ *
+ * Depends on PECL modules 
+ *  - ZipArchive
+ *  - Fileinfo
+ *  - Imagick (to reduce image filesize of embedded images if possible)
+ *  - DOM (PHP5 DOM XML)
+ *
+ * @author Jonathan Doelfs
+ * @copyright  AGPL License v3 - Jonathan Doelfs / Sodatech AG
+ */
 class SodaODT {
 	
 	protected $templateFile 	= false;
 	protected $replaceValueList = array();
-	
-	protected $gearman          = false;
 	
 	protected $finishedPlaceholders = array();
 	protected $embedFileList		= array();
