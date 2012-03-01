@@ -208,7 +208,11 @@ class SodaODT {
 		$lastNode = false;
 		$removeNodeList = array();
 		
-		foreach( $xmlElement->getElementsByTagNameNS( self::NS_TEXT, '*') as $node ) {
+		$nodeList = $this->toArray( $xmlElement->getElementsByTagNameNS( self::NS_TEXT, '*') );
+		foreach( $nodeList as $node ) {
+			if( !$node || !is_object($node) ) {
+				continue;
+			}
 			$this->normalizeChildNodes( $node, $lastNode, $removeNodeList );
 		}
 		
@@ -278,12 +282,21 @@ class SodaODT {
 		$placeholderCount = 0;
 		
 		// Get all ODT text nodes 
-		foreach( $xmlElement->getElementsByTagNameNS( self::NS_TEXT, '*') as $node ) {
+		$nodeList = $this->toArray( $xmlElement->getElementsByTagNameNS( self::NS_TEXT, '*') );
+		foreach( $nodeList as $node ) {
+			if( !$node || !is_object($node) ) {
+				continue;
+			}
 			
 			$replaceVars = array();
 			
+			$childNodeList = $this->toArray( $node->childNodes );
+			
 			// Parse the placeholders and prepare the data for them
-			foreach( $node->childNodes as $element ) {
+			foreach( $childNodeList as $element ) {
+				if( !$node || !is_object($node) ) {
+					continue;
+				}
 				
 				// Skip nodes which dont include text (i.e. images)
 				if( $element->nodeName != '#text' ) {
@@ -319,8 +332,6 @@ class SodaODT {
 								elseif( $tmpVal->getInstruction() == 'show_block' ) {
 									// nothing
 								}
-								
-								$tmpVal = '';
 							} 
 							
 							$replaceVars[ $placeholder['replaceString'] ] = $tmpVal;
@@ -336,7 +347,8 @@ class SodaODT {
 						}
 						
 						// Get the row element which should be repeated
-						$repeatElementList = $this->getParentElementListOfType( $element, $this->repeatableTags );
+						$removeNodeList = array( self::$nsPrefixList[ self::NS_TEXT ] .':soft-page-break');
+						$repeatElementList = $this->getParentElementListOfType( $element, $this->repeatableTags, $removeNodeList, $removeNodeList );
 						if( !$repeatElementList ) {
 							continue;
 						}
@@ -367,6 +379,48 @@ class SodaODT {
 			}
 			
 			
+			if( $replaceVars ) {
+				foreach( $replaceVars as $tmpKey => $tmpVal ) {
+					if( is_a( $tmpVal, 'SodaODTInstruction' ) ) {
+						if( $tmpVal->getInstruction() == 'hide' ) {
+							$instructionData = $tmpVal->getData();
+							$element = $instructionData['element'];
+
+							$matchList = false;
+							if( $instructionData['mode'] == 'row' ) {
+								$matchList = array( array(self::NS_TABLE, 'table-row') );
+							}
+							elseif( $instructionData['mode'] == 'table' ) {
+								$matchList = array( array(self::NS_TABLE, 'table') );
+							}
+							elseif( $instructionData['mode'] == 'frame' ) {
+								$matchList = array( array(self::NS_DRAW, 'frame') );
+							}
+							elseif( $instructionData['mode'] == 'paragraph' ) {
+								$matchList = array( array(self::NS_TEXT, 'p') );
+							}
+
+							if( $matchList ) {							
+								$removeElement = $this->getParentElementOfType( $element, $matchList );
+								if( $removeElement ) {
+									if( $removeElement->parentNode ) {
+										$removeElement->parentNode->removeChild( $removeElement );
+									}
+									else {
+										return false;
+									}
+								}
+							}
+						}
+						
+						$replaceVars[ $tmpKey ] = '';
+					}
+					
+					
+				}
+			}
+			
+			
 			// Do the actual replacement of the placeholders
 			if( $replaceVars ) { 
 				foreach( $node->childNodes as $element ) {
@@ -381,19 +435,45 @@ class SodaODT {
 
 		return $placeholderCount;
 	}
+
+
+
+	protected function toArray( $list ) {
+		$array = array();
+		foreach( $list as $entry ) {
+			$array[] = $entry;
+		}
+		
+		return $array;
+	}
 	
 	
 	
-	protected function getParentElementListOfType( $element, $matchList ) {
+	protected function getParentElementListOfType( $element, $matchList, $ignoreList=array(), $removeList=array() ) {
 		$repeatElement = $this->getParentElementOfType( $element, $matchList );
 		if( !$repeatElement ) {
 			return false;
 		}
 		
+		
 		$elementList = array( $repeatElement );
-		while( $repeatElement->nextSibling && $repeatElement->nextSibling->localName == $repeatElement->localName && $repeatElement->nextSibling->namespaceURI == $repeatElement->namespaceURI ) {
-			$repeatElement = $repeatElement->nextSibling;
-			$elementList[] = $repeatElement;
+		while( $repeatElement->nextSibling ) {
+			
+			if($repeatElement->nextSibling->localName == $repeatElement->localName && $repeatElement->nextSibling->namespaceURI == $repeatElement->namespaceURI) {
+				$repeatElement = $repeatElement->nextSibling;
+				$elementList[] = $repeatElement;
+			}
+			elseif( in_array( $repeatElement->nextSibling->nodeName, $removeList ) ) {
+				$repeatElement->nextSibling->parentNode->removeChild( $repeatElement->nextSibling );
+			}
+			elseif( in_array( $repeatElement->nextSibling->nodeName, $ignoreList ) ) {
+				$repeatElement = $repeatElement->nextSibling;
+			}
+			else {
+				break;
+			}
+			
+			
 		}
 		
 		return $elementList;
@@ -581,10 +661,6 @@ class SodaODT {
 					    $value = call_user_func_array('str_replace', $function['args'] );
 						break;
 						
-					case 'country_name':
-					    $value = get_landname( $value, $function['args'][0] );
-						break;
-						
 					case 'hide_block':
 					case 'show_block':
 						$argMatch = false;
@@ -600,8 +676,38 @@ class SodaODT {
 						if( ($argMatch && $funcName == 'hide_block') || (!$argMatch && $funcName == 'show_block') ) {
 					    	$value = new SodaODTInstruction('hide_block');
 						}
-						else {
+						elseif( !is_a($value, 'SodaODTInstruction') || $value->getInstruction() != 'hide_block') {
 							$value = new SodaODTInstruction('show_block');
+						}
+						break;
+						
+
+						
+					case 'hide':
+					case 'show':
+						$argList = $function['args'];
+						$mode = strtolower( trim( array_shift( $argList ) ) );
+						
+						if( $mode != 'row' && $mode != 'table' && $mode != 'frame' && $mode != 'paragraph') {
+							continue;
+						}
+						
+						$argMatch = false;
+						foreach( $argList as $arg ) {
+							if( $value == $arg ) {
+								$argMatch = true;
+								break;
+							}
+						}
+						
+						$displayData = array( 'mode' => $mode, 'element' => $element );
+						
+						$funcName = strtolower( $function['name'] );
+						if( ($argMatch && $funcName == 'hide') || (!$argMatch && $funcName == 'show') ) {
+					    	$value = new SodaODTInstruction('hide', $displayData );
+						}
+						elseif( !is_a($value, 'SodaODTInstruction') || $value->getInstruction() != 'hide') {
+							$value = new SodaODTInstruction('show', $displayData );
 						}
 						break;
 				}

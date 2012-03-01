@@ -21,17 +21,21 @@
  * @copyright  AGPL License v3 - Jonathan Doelfs / Sodatech AG
  */
 class SodaODTInstruction {
-    
 	protected $instruction = false;
+	protected $data = false;
 	
 	
-	
-	public function __construct( $instruction ) {
+	public function __construct( $instruction, $data=false ) {
 		$this->instruction = $instruction;
+		$this->data = $data;
 	} 
 	
 	public function getInstruction() {
 		return $this->instruction;
+	}
+	
+	public function getData() {
+		return $this->data;
 	}
 	
 }
